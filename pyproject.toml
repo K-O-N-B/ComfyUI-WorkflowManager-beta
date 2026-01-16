@@ -1,0 +1,34 @@
+[project]
+name = "ComfyUI-WorkflowManager-beta"  # ⚠️ 插件唯一标识符，创建后不可更改！要与ZIP文档内的大小写相同
+description = "A powerful workflow management extension for ComfyUI. This is beat version. Visit homepage and free download full version"
+version = "0.5.0"  # 当前版本号，遵循语义化版本控制
+readme = "README.md"
+license = { file = "LICENSE.txt" }  # 如果有LICENSE文件，否则改为: license = "MIT"
+requires-python = ">=3.10,<3.14"  # 支持的Python版本：3.10, 3.11, 3.12, 3.13
+
+# 依赖项列表（从 requirements.txt 中提取）
+dependencies = [
+    "psutil>=5.9.0",
+    "py-cpuinfo>=9.0.0",
+    "pynvml>=11.5.0",
+]
+
+[project.urls]
+# 如果是不开源插件，可以指向一个私有仓库或发布页面
+# 如果仓库是私有的，用户需要有访问权限才能安装
+Repository = "https://github.com/K-O-N-B/ComfyUI-WorkflowManager-beta"
+# 或者如果不想公开仓库，可以指向文档页面
+# Homepage = "https://www.notion.so/NZ-NZ-ComfyUI-workflow-management-assistant-25b3834f177a800493d9d915d26c398c"
+# Repository = "https://www.notion.so/NZ-NZ-ComfyUI-workflow-management-assistant-25b3834f177a800493d9d915d26c398c"
+
+[tool.comfy]
+# ⚠️ 从 ComfyUI Registry 网站获取的发布者ID（创建后不可更改）
+PublisherId = "nz-newbee"  # 请替换为你的实际发布者ID，例如：K-O-N-B
+
+# 插件在Registry中显示的名称（可以随时更改）
+DisplayName = "NZ workflow manager - beta"
+
+# 插件图标URL（可选，但强烈推荐）
+# 支持 SVG、PNG、JPG 或 GIF，最大尺寸 800x400 像素
+# 可以上传到GitHub仓库，然后使用raw.githubusercontent.com链接
+Icon = "https://raw.githubusercontent.com/K-O-N-B/NZ-Workspace-Assistant-Public/main/logo.png"
