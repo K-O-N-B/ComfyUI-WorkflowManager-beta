@@ -1,0 +1,529 @@
+"""
+NZ工作流助手 - WebSocket消息处理模块
+处理来自前端的WebSocket消息和文件操作请求
+"""
+
+import os
+import json
+import shutil
+from ..core.logger import get_logger
+from ..core.nodes import NZWorkflowManagerNode
+from ..core.constants import WEBSOCKET_RESPONSE_TYPE, INVALID_FILENAME_CHARS
+from ..utils.validation import validate_path, validate_filename
+
+
+# 获取logger实例
+logger = get_logger()
+
+
+def handle_websocket_message(message_data, client_id=None):
+    """处理来自前端的WebSocket消息"""
+    try:
+        if message_data.get("type") == "nz_workflow_manager":
+            action = message_data.get("action")
+            path = message_data.get("path", "")
+            workflow_data = message_data.get("workflow_data", "{}")
+            
+            logger.info(f"收到WebSocket消息: {action} - {path}")
+            
+            if action == "list_directory":
+                return _handle_list_directory(path)
+            elif action == "load_workflow":
+                return _handle_load_workflow(path)
+            elif action == "create_directory":
+                return _handle_create_directory(message_data)
+            elif action == "delete_file":
+                return _handle_delete_file(message_data)
+            elif action == "delete_directory":
+                return _handle_delete_directory(message_data)
+            elif action == "path_exists":
+                return _handle_path_exists(message_data)
+            elif action == "copy_file":
+                return _handle_copy_file(message_data)
+            elif action == "copy_directory":
+                return _handle_copy_directory(message_data)
+            elif action == "move_file":
+                return _handle_move_file(message_data)
+            elif action == "move_directory":
+                return _handle_move_directory(message_data)
+            elif action == "rename":
+                return _handle_rename(message_data)
+            elif action == "save_workflow":
+                return _handle_save_workflow(message_data)
+            else:
+                return {
+                    "type": WEBSOCKET_RESPONSE_TYPE,
+                    "action": action,
+                    "error": f"不支持的操作: {action}"
+                }
+                
+    except Exception as e:
+        logger.error(f"处理WebSocket消息失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": message_data.get("action", "unknown"),
+            "error": f"处理失败: {str(e)}"
+        }
+
+
+def _handle_list_directory(path):
+    """处理列出目录操作"""
+    try:
+        # 创建临时节点实例来执行操作
+        node = NZWorkflowManagerNode()
+        result = node.list_directory(path)
+        
+        # 返回WebSocket响应格式
+        response = {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "list_directory",
+            "result": json.loads(result[0]) if result and result[0] else None
+        }
+        
+        return response
+    except Exception as e:
+        logger.error(f"列出目录失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "list_directory",
+            "error": str(e)
+        }
+
+
+def _handle_load_workflow(path):
+    """处理加载工作流操作"""
+    try:
+        # 创建临时节点实例来执行文件读取操作
+        node = NZWorkflowManagerNode()
+        result = node.load_workflow(path)
+        
+        # 返回WebSocket响应格式
+        response = {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "load_workflow",
+            "result": json.loads(result[0]) if result and result[0] else None
+        }
+        
+        return response
+    except Exception as e:
+        logger.error(f"加载工作流失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "load_workflow",
+            "error": str(e)
+        }
+
+
+def _handle_create_directory(message_data):
+    """处理创建目录操作"""
+    parent_path = message_data.get("parent_path", "")
+    directory_name = message_data.get("directory_name", "")
+    
+    try:
+        # 验证输入
+        if not validate_path(parent_path):
+            raise ValueError("父目录路径无效")
+        
+        if not validate_filename(directory_name):
+            raise ValueError("目录名包含非法字符或为空")
+        
+        new_directory_path = os.path.join(parent_path, directory_name)
+        
+        # 检查目录是否已存在
+        if os.path.exists(new_directory_path):
+            raise ValueError("目录已存在")
+        
+        # 创建目录
+        os.makedirs(new_directory_path)
+        logger.info(f"成功创建目录: {new_directory_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "create_directory",
+            "result": {"success": True, "path": new_directory_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"创建目录失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "create_directory",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_delete_file(message_data):
+    """处理删除文件操作"""
+    file_path = message_data.get("file_path", "")
+    
+    try:
+        if not validate_path(file_path):
+            raise ValueError("文件路径无效")
+        
+        if not os.path.exists(file_path):
+            raise ValueError("文件不存在")
+        
+        if not os.path.isfile(file_path):
+            raise ValueError("指定路径不是文件")
+        
+        os.remove(file_path)
+        logger.info(f"成功删除文件: {file_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "delete_file",
+            "result": {"success": True, "path": file_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"删除文件失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "delete_file",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_delete_directory(message_data):
+    """处理删除目录操作"""
+    directory_path = message_data.get("directory_path", "")
+    
+    try:
+        if not validate_path(directory_path):
+            raise ValueError("目录路径无效")
+        
+        if not os.path.exists(directory_path):
+            raise ValueError("目录不存在")
+        
+        if not os.path.isdir(directory_path):
+            raise ValueError("指定路径不是目录")
+        
+        shutil.rmtree(directory_path)
+        logger.info(f"成功删除目录: {directory_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "delete_directory",
+            "result": {"success": True, "path": directory_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"删除目录失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "delete_directory",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_path_exists(message_data):
+    """处理路径存在检查操作"""
+    path_to_check = message_data.get("path", "")
+    
+    try:
+        if not path_to_check:
+            raise ValueError("路径不能为空")
+        
+        exists = os.path.exists(path_to_check)
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "path_exists",
+            "result": {"success": True, "exists": exists, "path": path_to_check}
+        }
+        
+    except Exception as e:
+        logger.error(f"检查路径存在失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "path_exists",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_copy_file(message_data):
+    """处理复制文件操作"""
+    source_path = message_data.get("source_path", "")
+    target_path = message_data.get("target_path", "")
+    new_name = message_data.get("new_name", "")
+    
+    try:
+        if not validate_path(source_path) or not validate_path(target_path):
+            raise ValueError("源路径或目标路径无效")
+        
+        if not os.path.exists(source_path):
+            raise ValueError("源文件不存在")
+        
+        if not os.path.isfile(source_path):
+            raise ValueError("源路径不是文件")
+        
+        if not os.path.exists(target_path):
+            raise ValueError("目标目录不存在")
+        
+        if not os.path.isdir(target_path):
+            raise ValueError("目标路径不是目录")
+        
+        # 确定目标文件名
+        if new_name:
+            if not validate_filename(new_name):
+                raise ValueError("新文件名包含非法字符")
+            target_file_name = new_name
+        else:
+            target_file_name = os.path.basename(source_path)
+        
+        # 构建完整的目标文件路径
+        full_target_path = os.path.join(target_path, target_file_name)
+        
+        # 复制文件（覆盖已存在的文件）
+        shutil.copy2(source_path, full_target_path)
+        logger.info(f"成功复制文件: {source_path} -> {full_target_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "copy_file",
+            "result": {"success": True, "source": source_path, "target": full_target_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"复制文件失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "copy_file",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_copy_directory(message_data):
+    """处理复制目录操作"""
+    source_path = message_data.get("source_path", "")
+    target_path = message_data.get("target_path", "")
+    new_name = message_data.get("new_name", "")
+    
+    try:
+        if not validate_path(source_path) or not validate_path(target_path):
+            raise ValueError("源路径或目标路径无效")
+        
+        if not os.path.exists(source_path):
+            raise ValueError("源目录不存在")
+        
+        if not os.path.isdir(source_path):
+            raise ValueError("源路径不是目录")
+        
+        if not os.path.exists(target_path):
+            raise ValueError("目标目录不存在")
+        
+        if not os.path.isdir(target_path):
+            raise ValueError("目标路径不是目录")
+        
+        # 确定目标目录名
+        if new_name:
+            if not validate_filename(new_name):
+                raise ValueError("新目录名包含非法字符")
+            target_dir_name = new_name
+        else:
+            target_dir_name = os.path.basename(source_path)
+        
+        # 构建完整的目标目录路径
+        full_target_path = os.path.join(target_path, target_dir_name)
+        
+        # 复制目录（覆盖已存在的目录）
+        if os.path.exists(full_target_path):
+            shutil.rmtree(full_target_path)
+        shutil.copytree(source_path, full_target_path)
+        logger.info(f"成功复制目录: {source_path} -> {full_target_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "copy_directory",
+            "result": {"success": True, "source": source_path, "target": full_target_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"复制目录失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "copy_directory",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_move_file(message_data):
+    """处理移动文件操作"""
+    source_path = message_data.get("source_path", "")
+    target_path = message_data.get("target_path", "")
+    
+    try:
+        if not validate_path(source_path) or not validate_path(target_path):
+            raise ValueError("源路径或目标路径无效")
+        
+        if not os.path.exists(source_path):
+            raise ValueError("源文件不存在")
+        
+        if not os.path.isfile(source_path):
+            raise ValueError("源路径不是文件")
+        
+        if not os.path.exists(target_path):
+            raise ValueError("目标目录不存在")
+        
+        if not os.path.isdir(target_path):
+            raise ValueError("目标路径不是目录")
+        
+        # 获取文件名
+        file_name = os.path.basename(source_path)
+        
+        # 构建完整的目标文件路径
+        full_target_path = os.path.join(target_path, file_name)
+        
+        # 移动文件（覆盖已存在的文件）
+        shutil.move(source_path, full_target_path)
+        logger.info(f"成功移动文件: {source_path} -> {full_target_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "move_file",
+            "result": {"success": True, "source": source_path, "target": full_target_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"移动文件失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "move_file",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_move_directory(message_data):
+    """处理移动目录操作"""
+    source_path = message_data.get("source_path", "")
+    target_path = message_data.get("target_path", "")
+    
+    try:
+        if not validate_path(source_path) or not validate_path(target_path):
+            raise ValueError("源路径或目标路径无效")
+        
+        if not os.path.exists(source_path):
+            raise ValueError("源目录不存在")
+        
+        if not os.path.isdir(source_path):
+            raise ValueError("源路径不是目录")
+        
+        if not os.path.exists(target_path):
+            raise ValueError("目标目录不存在")
+        
+        if not os.path.isdir(target_path):
+            raise ValueError("目标路径不是目录")
+        
+        # 获取目录名
+        dir_name = os.path.basename(source_path)
+        
+        # 构建完整的目标目录路径
+        full_target_path = os.path.join(target_path, dir_name)
+        
+        # 移动目录（覆盖已存在的目录）
+        if os.path.exists(full_target_path):
+            shutil.rmtree(full_target_path)
+        shutil.move(source_path, full_target_path)
+        logger.info(f"成功移动目录: {source_path} -> {full_target_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "move_directory",
+            "result": {"success": True, "source": source_path, "target": full_target_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"移动目录失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "move_directory",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_rename(message_data):
+    """处理重命名操作"""
+    old_path = message_data.get("old_path", "")
+    new_name = message_data.get("new_name", "")
+    
+    try:
+        if not validate_path(old_path):
+            raise ValueError("原路径无效")
+        
+        if not os.path.exists(old_path):
+            raise ValueError("原路径不存在")
+        
+        if not validate_filename(new_name):
+            raise ValueError("新名称包含非法字符或为空")
+        
+        # 构建新路径
+        parent_dir = os.path.dirname(old_path)
+        new_path = os.path.join(parent_dir, new_name)
+        
+        # 检查新路径是否已存在
+        if os.path.exists(new_path):
+            raise ValueError("目标名称已存在")
+        
+        # 执行重命名
+        os.rename(old_path, new_path)
+        logger.info(f"成功重命名: {old_path} -> {new_path}")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "rename",
+            "result": {"success": True, "old_path": old_path, "new_path": new_path}
+        }
+        
+    except Exception as e:
+        logger.error(f"重命名失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "rename",
+            "result": {"success": False, "error": str(e)}
+        }
+
+
+def _handle_save_workflow(message_data):
+    """处理保存工作流操作"""
+    file_path = message_data.get("file_path", "")
+    workflow_data = message_data.get("workflow_data", "")
+    
+    try:
+        if not file_path:
+            raise ValueError("文件路径不能为空")
+        
+        if not workflow_data:
+            raise ValueError("工作流数据不能为空")
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # 如果workflow_data是字符串，直接写入；如果是对象，序列化为JSON
+        if isinstance(workflow_data, str):
+            content = workflow_data
+        else:
+            content = json.dumps(workflow_data, indent=2, ensure_ascii=False)
+        
+        # 写入文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info(f"工作流保存成功: {file_path} ({len(content)} 字符)")
+        
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "save_workflow",
+            "result": {
+                "success": True, 
+                "file_path": file_path,
+                "size": len(content)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"保存工作流失败: {str(e)}")
+        return {
+            "type": WEBSOCKET_RESPONSE_TYPE,
+            "action": "save_workflow",
+            "result": {"success": False, "error": str(e)}
+        }
